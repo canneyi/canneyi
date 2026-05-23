@@ -5,7 +5,7 @@ When a scheduled Claude Code session is triggered with the prompt **"Run the pod
 ## 1. Detect new episodes
 
 ```bash
-cd /home/user/facebook
+cd /home/user/canneyi
 pip install -q -r requirements.txt
 python podcast_tracker/fetch.py
 ```
@@ -109,7 +109,7 @@ If the Gmail tool fails or isn't available in the session, note it in the digest
 ## 6. Commit and push
 
 ```bash
-cd /home/user/facebook
+cd /home/user/canneyi
 git add podcast_tracker/digests/{YYYY-MM-DD}.md podcast_tracker/cache/seen_episodes.json podcast_tracker/cache/feeds.json
 python podcast_tracker/fetch.py --mark-seen
 git add podcast_tracker/cache/seen_episodes.json
