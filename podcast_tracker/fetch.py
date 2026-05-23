@@ -39,9 +39,41 @@ SEEN_CACHE = CACHE_DIR / "seen_episodes.json"
 PENDING_PATH = CACHE_DIR / "pending_episodes.json"
 
 ITUNES_LOOKUP = "https://itunes.apple.com/lookup?id={apple_id}"
+YOUTUBE_FEED_TEMPLATE = "https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
 USER_AGENT = "podcast-tracker/1.0 (+https://github.com/canneyi/facebook)"
 MAX_TRANSCRIPT_BYTES = 400_000  # cap fetched transcript page size
 PER_FEED_NEW_LIMIT = 5  # max new episodes pulled per feed per run
+
+
+def _entry_key(p: dict) -> str:
+    """Stable per-entry cache key (Apple ID for podcasts, prefixed handle for YouTube)."""
+    if p.get("apple_id"):
+        return p["apple_id"]
+    if p.get("youtube_handle"):
+        return f"yt:{p['youtube_handle'].lstrip('@')}"
+    return p["name"]
+
+
+def _resolve_youtube_handle(handle: str, client: httpx.Client) -> str | None:
+    """Resolve a YouTube @handle to its channel feed URL."""
+    handle = handle.lstrip("@")
+    page = f"https://www.youtube.com/@{handle}"
+    try:
+        r = client.get(page, timeout=20, follow_redirects=True)
+        r.raise_for_status()
+    except Exception as e:
+        print(f"  YouTube fetch failed for @{handle}: {e}", file=sys.stderr)
+        return None
+    for pattern in (
+        r'"channelId":"(UC[a-zA-Z0-9_-]{22})"',
+        r'channel/(UC[a-zA-Z0-9_-]{22})',
+        r'<meta itemprop="(?:identifier|channelId)" content="(UC[a-zA-Z0-9_-]{22})"',
+    ):
+        m = re.search(pattern, r.text)
+        if m:
+            return YOUTUBE_FEED_TEMPLATE.format(channel_id=m.group(1))
+    print(f"  YouTube channel ID not found in page for @{handle}", file=sys.stderr)
+    return None
 
 
 def _load_json(path: pathlib.Path, default):
@@ -64,33 +96,39 @@ def load_config() -> list[dict]:
 
 
 def resolve_feed_urls(podcasts: list[dict], client: httpx.Client) -> dict[str, str]:
-    """Resolve Apple Podcast IDs to RSS feed URLs, cached on disk."""
+    """Resolve each entry to a feed URL (iTunes lookup for Apple, channel-page scrape for YouTube)."""
     cache = _load_json(FEEDS_CACHE, {})
     changed = False
     for p in podcasts:
+        key = _entry_key(p)
         if p.get("feed_url"):
-            cache[p["apple_id"]] = p["feed_url"]
-            changed = True
+            if cache.get(key) != p["feed_url"]:
+                cache[key] = p["feed_url"]
+                changed = True
             continue
-        if p["apple_id"] in cache:
+        if key in cache:
             continue
-        url = ITUNES_LOOKUP.format(apple_id=p["apple_id"])
-        try:
-            r = client.get(url, timeout=15)
-            r.raise_for_status()
-            data = r.json()
-            if data.get("resultCount"):
-                feed = data["results"][0].get("feedUrl")
-                if feed:
-                    cache[p["apple_id"]] = feed
-                    changed = True
-                    print(f"resolved {p['name']} -> {feed}")
+        feed = None
+        if p.get("apple_id"):
+            url = ITUNES_LOOKUP.format(apple_id=p["apple_id"])
+            try:
+                r = client.get(url, timeout=15)
+                r.raise_for_status()
+                data = r.json()
+                if data.get("resultCount"):
+                    feed = data["results"][0].get("feedUrl")
                 else:
-                    print(f"WARN no feedUrl for {p['name']}", file=sys.stderr)
-            else:
-                print(f"WARN iTunes returned no results for {p['name']}", file=sys.stderr)
-        except Exception as e:
-            print(f"ERR resolving {p['name']}: {e}", file=sys.stderr)
+                    print(f"WARN iTunes returned no results for {p['name']}", file=sys.stderr)
+            except Exception as e:
+                print(f"ERR resolving {p['name']}: {e}", file=sys.stderr)
+        elif p.get("youtube_handle"):
+            feed = _resolve_youtube_handle(p["youtube_handle"], client)
+        if feed:
+            cache[key] = feed
+            changed = True
+            print(f"resolved {p['name']} -> {feed}")
+        else:
+            print(f"WARN no feed URL for {p['name']}", file=sys.stderr)
     if changed:
         _save_json(FEEDS_CACHE, cache)
     return cache
@@ -193,7 +231,8 @@ def fetch_new_episodes() -> dict:
         seen = _load_json(SEEN_CACHE, {})
         result = {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "episodes": []}
         for p in podcasts:
-            feed_url = feeds.get(p["apple_id"])
+            key = _entry_key(p)
+            feed_url = feeds.get(key)
             if not feed_url:
                 print(f"SKIP {p['name']}: no feed_url", file=sys.stderr)
                 continue
@@ -208,7 +247,7 @@ def fetch_new_episodes() -> dict:
                 print(f"ERR fetching feed: {e}", file=sys.stderr)
                 continue
             entries = parsed.entries or []
-            seen_ids = set(seen.get(p["apple_id"], []))
+            seen_ids = set(seen.get(key, []))
             new_for_feed = []
             for entry in entries:
                 eid = _episode_id(entry)
@@ -225,7 +264,7 @@ def fetch_new_episodes() -> dict:
                 transcript = _try_fetch_transcript(entry, client)
                 episode = {
                     "podcast": p["name"],
-                    "apple_id": p["apple_id"],
+                    "key": key,
                     "episode_id": eid,
                     "title": entry.get("title"),
                     "link": entry.get("link"),
@@ -255,7 +294,8 @@ def seed_seen_cache() -> None:
     with httpx.Client(headers=headers, follow_redirects=True) as client:
         feeds = resolve_feed_urls(podcasts, client)
         for p in podcasts:
-            feed_url = feeds.get(p["apple_id"])
+            key = _entry_key(p)
+            feed_url = feeds.get(key)
             if not feed_url:
                 continue
             try:
@@ -266,8 +306,8 @@ def seed_seen_cache() -> None:
                 print(f"ERR seeding {p['name']}: {e}", file=sys.stderr)
                 continue
             ids = [_episode_id(e) for e in (parsed.entries or [])]
-            seen[p["apple_id"]] = [i for i in ids if i]
-            print(f"seeded {p['name']}: {len(seen[p['apple_id']])} episodes")
+            seen[key] = [i for i in ids if i]
+            print(f"seeded {p['name']}: {len(seen[key])} episodes")
     _save_json(SEEN_CACHE, seen)
 
 
@@ -276,7 +316,8 @@ def mark_seen() -> None:
     pending = _load_json(PENDING_PATH, {"episodes": []})
     seen = _load_json(SEEN_CACHE, {})
     for ep in pending.get("episodes", []):
-        ids = seen.setdefault(ep["apple_id"], [])
+        key = ep.get("key") or ep.get("apple_id")
+        ids = seen.setdefault(key, [])
         if ep["episode_id"] not in ids:
             ids.append(ep["episode_id"])
     _save_json(SEEN_CACHE, seen)

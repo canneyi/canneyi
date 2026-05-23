@@ -46,18 +46,24 @@ Configure a recurring trigger in the Claude Code web app
 
 ## Adding or removing podcasts
 
-Edit `podcasts.json` and commit:
+Edit `podcasts.json` and commit. Three entry shapes are supported:
 
 ```jsonc
-{
-  "name": "New Podcast Name",
-  "apple_id": "1234567890"  // numeric ID from the podcasts.apple.com URL
-}
+// Apple Podcasts (most common)
+{ "name": "New Podcast", "apple_id": "1234567890" }
+
+// YouTube channel (uses YouTube's per-channel Atom feed)
+{ "name": "Some Channel", "youtube_handle": "the-handle-without-the-at" }
+
+// Direct RSS feed (skip lookup entirely)
+{ "name": "Custom", "feed_url": "https://example.com/feed.xml" }
 ```
 
-Set `"paused": true` to skip a feed without removing it. Set
-`"feed_url": "https://..."` to bypass the iTunes lookup when you already
-know the RSS URL.
+Set `"paused": true` to skip an entry without removing it.
+
+YouTube notes: only the latest ~15 videos appear in the feed, descriptions
+may be shorter than full video descriptions, and there's no audio
+enclosure — so summaries will be derived from titles + descriptions only.
 
 ## Manual run
 
