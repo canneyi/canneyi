@@ -1,0 +1,12 @@
+{
+  "name": "canneyi-skills",
+  "description": "Karpathy coding guidelines (think before coding, simplicity first, surgical changes, goal-driven execution) and Tufte data visualization ideation/critique skill",
+  "version": "1.0.0",
+  "author": {
+    "name": "canneyi"
+  },
+  "skills": [
+    "./skills/karpathy-guidelines",
+    "./skills/tufte-viz"
+  ]
+}
