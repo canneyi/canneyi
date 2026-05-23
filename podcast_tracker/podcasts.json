@@ -25,6 +25,6 @@
     { "name": "The Grant Williams Podcast", "apple_id": "1508585135" },
     { "name": "Browsers with Friends", "apple_id": "1589949171" },
     { "name": "The Bugbash Podcast", "apple_id": "1828967504" },
-    { "name": "Antithesis (YouTube)", "youtube_handle": "antithesis-hq" }
+    { "name": "Antithesis (YouTube)", "youtube_handle": "antithesis-hq", "paused": true }
   ]
 }
