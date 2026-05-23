@@ -5,7 +5,7 @@
     { "name": "Acid Horizon", "apple_id": "1512615438" },
     { "name": "Acquired", "apple_id": "1050462261" },
     { "name": "Backlisted", "apple_id": "1063252175" },
-    { "name": "Chapo Trap House", "apple_id": "1097417804" },
+    { "name": "Chapo Trap House", "apple_id": "1097417804", "paused": true },
     { "name": "Dr John Vervaeke", "apple_id": "1680606350" },
     { "name": "Dwarkesh Podcast", "apple_id": "1516093381" },
     { "name": "Epsilon Theory Podcast", "apple_id": "1107682538" },
