@@ -27,47 +27,38 @@ Each episode has:
 - `show_notes_text` — plain-text show notes (always present)
 - `transcript` — optional `{source_url, text}` if a transcript page was found
 
-## 3. Produce detailed structured notes per episode
+## 3. Write the digest — editorial style
 
-For **each** episode in `episodes`, generate a section that follows this exact shape (the structured-notes style the user picked):
+The digest is a curated weekly briefing, not a mechanical per-feed dump. It reads like a sharp newsletter, but its coverage rules are strict (see below).
+
+Structure, in order:
+
+1. **Opening lede** (no heading): one paragraph, 3–6 sentences, tying the window's episodes together — the dominant tension or theme the feed kept circling, written with a point of view. No throat-clearing.
+
+2. **Themed sections**: group episodes under `## ALL-CAPS CATEGORY` headings that fit the actual material (e.g. `## MACRO & FINANCE`, `## AI & TECHNOLOGY`, `## HISTORY & CULTURE`). Invent categories per digest; 3–6 sections is typical. Order sections by strength of material.
+
+3. **Per episode**, within its section:
 
 ```markdown
-### {Podcast name} — {Episode title}
-*Published {YYYY-MM-DD} · {duration if known} · [Listen]({link})*
+### {Podcast name} {#episode number if the show numbers them} — "{Episode title}"
 
-**Guest / Format:** {Who's on, or "solo", or "interview" / "roundtable"}
+**Guest:** {name (affiliation; one-line credential)} · **Hosts:** {host names} · **Aired:** {YYYY-MM-DD} · *{source note — either "Full official transcript read; quotes verbatim." or "No transcript — notes from show notes only."}* · [Listen]({link})
 
-**One-sentence framing:** {What this episode is fundamentally about.}
+**Thesis:** {2–5 sentences distilling the episode's core argument, with the specific numbers, names, and dates the speakers actually cite.}
 
-**Topics**
-- **{Topic 1 heading}**
-  - {Sub-bullet of an idea, claim, or anecdote}
-  - {Sub-bullet — include specific numbers, names, dates the host/guest cite}
-- **{Topic 2 heading}**
-  - ...
+- **{Bolded lead sentence for the first key point.}** {2–4 sentences of substance — figures, claims, anecdotes, attributed to the speaker.}
+- **{Bolded lead for the next point.}** {...}
+{3–8 bullets depending on how much source material exists}
 
-**Notable claims / arguments**
-- {Claim — phrased as the speaker would phrase it, attributed to the guest where relevant}
-
-**Frameworks / mental models introduced**
-- {Name of framework — one-line gloss}
-
-**References (books, papers, people, prior episodes)**
-- {Title — author — why it came up}
-
-**Quotes (if transcript available)**
-> "{Exact quote}" — {speaker}, ~{timestamp if knowable}
-
-**Open questions raised**
-- {Unresolved question the conversation surfaced}
+> "{Exact quote}" — {speaker}
+{Quotes only when a transcript exists. Never fabricate a quote.}
 ```
 
-Rules:
-- If only show notes are available (no transcript), keep the same skeleton but `Topics` will be coarser and the `Quotes` section can be omitted with a note `_(no transcript available — notes derived from show notes only)_`.
-- Do not fabricate quotes, timestamps, or specific numbers. If the show notes don't say it, don't write it.
-- Skip any sub-section that genuinely has no content rather than padding it. An episode might legitimately have no frameworks or no references.
-- Keep names/titles/dates verbatim from the source. Don't paraphrase a book title.
-- Target ~250-600 words per episode depending on how much source material there is.
+**Coverage rules — these are hard requirements:**
+- Every episode in `pending_episodes.json` must be either (a) covered in a section, or (b) explicitly listed in a short end-note (`*Dropped for thin sourcing: {Podcast — Title}, ...*`) when the source material is genuinely too thin to say anything substantive. Never silently omit an episode, and never pad a thin episode into filler.
+- Do not fabricate quotes, timestamps, numbers, or claims. Transcript available → verbatim quotes allowed. Show-notes-only → no quotes, coarser bullets, and say so in the source note.
+- Keep names, book titles, and dates verbatim from the source. Don't paraphrase a title.
+- Target ~150–500 words per episode depending on source material.
 
 ## 4. Write the digest file
 
@@ -80,38 +71,44 @@ Skeleton:
 
 {N} new episodes across {M} podcasts since the last digest.
 
-## Contents
-- [{Podcast} — {Title}](#anchor-1)
-- ...
+{Opening lede paragraph}
 
----
+{Themed sections, each with its episodes, per step 3}
 
-{One section per episode using the structure from step 3, separated by `---`}
-
----
+{*Dropped for thin sourcing: ...* — only if any were dropped}
 
 ## Issues
 {Only include if any feeds failed. Otherwise omit this section.}
 - {Podcast name}: {short error}
 ```
 
-Order the episodes by `published` date, newest first.
-
 ## 5. Email the digest
 
-Use the Gmail MCP tool to create a draft (the available tools only expose `create_draft`, not a direct send). **Create the draft addressed to `vpst6tdbw2@privaterelay.appleid.com`** with:
+**5a. Duplicate guard (run this FIRST, every time):** using the Gmail MCP tools, call `list_drafts` with query `subject:"Podcast digest — {YYYY-MM-DD}"` AND `search_threads` with the same subject. If a draft or sent message for today's digest already exists, do NOT create another draft — note the existing one in the session reply and skip to step 6.
+
+**5b. Render the committed file to HTML mechanically** (never re-compose the content by hand):
+
+```bash
+pip install -q markdown
+python -c "import markdown, pathlib; print(markdown.markdown(pathlib.Path('podcast_tracker/digests/{YYYY-MM-DD}.md').read_text(), extensions=['extra']))" > /tmp/digest.html
+```
+
+**5c. Create exactly ONE draft** via the Gmail `create_draft` tool, addressed to `vpst6tdbw2@privaterelay.appleid.com`:
 
 - Subject: `Podcast digest — {YYYY-MM-DD} ({N} episodes)`
-- Body: **the exact, complete contents of the digest file you wrote in step 4** — every episode, in full, with all its structured-notes sections. Get the body by reading the file back from disk (e.g. `cat podcast_tracker/digests/{YYYY-MM-DD}.md`) and using that text **verbatim**. Do not re-compose the body from memory. Prepend a single "Generated by podcast tracker" footer line linking to the committed file URL on GitHub.
+- `htmlBody`: the exact contents of `/tmp/digest.html`
+- `body` (plain-text alternative): the exact contents of the committed `.md` file, read back from disk with `cat`
+- Prepend a single "Generated by podcast tracker" footer line linking to the committed file URL on GitHub (in both bodies).
 
-**The body must contain the full per-episode notes for ALL {N} episodes — the same content that is in the committed file.** Do NOT, under any circumstances:
+**The bodies must contain the full digest — every episode, verbatim from the committed file (the HTML being its mechanical rendering).** Do NOT, under any circumstances:
 - substitute a shortened version, a "highlights" / "top picks" section, or a contents list followed by "full notes are in the committed file";
 - summarize, truncate, drop, or sample episodes because the digest is long;
-- decide the digest is "too big to email" and abbreviate it on your own.
+- decide the digest is "too big to email" and abbreviate it on your own;
+- re-type or re-compose the body from memory instead of reading the file/rendering from disk.
 
-If the digest is large, that is expected — send it in full anyway. A short TL;DR / overview line MAY be added at the very top, but only **in addition to**, never **instead of**, the complete notes.
+If the digest is large, that is expected — send it in full anyway.
 
-If the `create_draft` call genuinely fails (e.g. a hard tool/size error), do NOT silently downgrade to an abbreviated draft. Record the failure verbatim in the digest's `## Issues` section, note that the email was not created, and continue — the committed markdown file is the source of truth.
+**5d. If `create_draft` errors or times out: do NOT retry blind.** Large bodies can appear to fail while actually succeeding, which creates duplicate drafts. First re-run the duplicate guard (5a); only retry if no draft for today exists. If it genuinely fails twice, record the failure verbatim in the digest's `## Issues` section, note that the email was not created, and continue — the committed markdown file is the source of truth.
 
 ## 6. Commit and push
 
@@ -134,6 +131,6 @@ End the session with a short text reply summarizing:
 - Number of new episodes
 - Which podcasts they came from
 - Link to the committed digest file
-- Whether the email send succeeded
+- Whether the email draft was created (and whether a duplicate was averted in 5a)
 
 That's it — keep the reply under 5 lines.
