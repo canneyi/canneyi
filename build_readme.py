@@ -1,5 +1,4 @@
 from python_graphql_client import GraphqlClient
-import feedparser
 import httpx
 import json
 import pathlib
@@ -10,18 +9,10 @@ import sys
 root = pathlib.Path(__file__).parent.resolve()
 client = GraphqlClient(endpoint="https://api.github.com/graphql")
 
-TOKEN = os.environ.get("SIMONW_TOKEN", "")
+TOKEN = os.environ.get("GH_TOKEN", "")
+GITHUB_USER = "canneyi"
 
-SKIP_REPOS = {
-    "playing-with-actions",
-    "simonw-readthedocs-experiments",
-    "datasette-comments",
-    "datasette-plot",
-    "datasette-write-ui",
-    "datasette-litestream",
-    "datasette-metadata-editable",
-    "datasette-short-links",
-}
+SKIP_REPOS: set[str] = set()
 
 
 def replace_chunk(content, marker, chunk, inline=False):
@@ -37,7 +28,7 @@ def replace_chunk(content, marker, chunk, inline=False):
 
 GRAPHQL_SEARCH_QUERY = """
 query {
-  search(first: 100, type:REPOSITORY, query:"is:public owner:simonw owner:dogsheep owner:datasette sort:updated") {
+  search(first: 100, type:REPOSITORY, query:"is:public user:%s sort:updated") {
     nodes {
       __typename
       ... on Repository {
@@ -56,13 +47,13 @@ query {
     }
   }
 }
-"""
+""" % GITHUB_USER
 
 RELEASES_CACHE_PATH = root / "releases_cache.json"
 
 GRAPHQL_SEARCH_QUERY_PAGINATED = """
 query {
-  search(first: 100, type:REPOSITORY, query:"is:public owner:simonw owner:dogsheep owner:datasette sort:updated", after: AFTER) {
+  search(first: 100, type:REPOSITORY, query:"is:public user:%s sort:updated", after: AFTER) {
     pageInfo {
       hasNextPage
       endCursor
@@ -85,7 +76,7 @@ query {
     }
   }
 }
-"""
+""" % GITHUB_USER
 
 
 def load_releases_cache():
@@ -182,32 +173,6 @@ def fetch_and_update_releases(oauth_token):
     return list(cache.values())
 
 
-def fetch_tils():
-    sql = """
-        select path, replace(title, '_', '\_') as title, url, topic, slug, created_utc
-        from til order by created_utc desc limit 6
-    """.strip()
-    return httpx.get(
-        "https://til.simonwillison.net/tils.json",
-        params={
-            "sql": sql,
-            "_shape": "array",
-        },
-    ).json()
-
-
-def fetch_blog_entries():
-    entries = feedparser.parse("https://simonwillison.net/atom/entries/")["entries"]
-    return [
-        {
-            "title": entry["title"],
-            "url": entry["link"].split("#")[0],
-            "published": entry["published"].split("T")[0],
-        }
-        for entry in entries
-    ]
-
-
 if __name__ == "__main__":
     readme = root / "README.md"
     project_releases = root / "releases.md"
@@ -223,7 +188,7 @@ if __name__ == "__main__":
             "[{repo} {release}]({url}) - {published_day}".format(**release)
             for release in releases[:8]
         ]
-    )
+    ) or "_No releases yet._"
     readme_contents = readme.open().read()
     rewritten = replace_chunk(readme_contents, "recent_releases", md)
 
@@ -243,40 +208,21 @@ if __name__ == "__main__":
             )
             for release in releases
         ]
-    )
-    project_releases_content = project_releases.open().read()
-    project_releases_content = replace_chunk(
-        project_releases_content, "recent_releases", project_releases_md
-    )
-    project_releases_content = replace_chunk(
-        project_releases_content, "project_count", f"{len(releases):,}", inline=True
-    )
-    project_releases_content = replace_chunk(
-        project_releases_content,
-        "releases_count",
-        "{:,}".format(sum(r["total_releases"] for r in releases)),
-        inline=True,
-    )
-    project_releases.open("w").write(project_releases_content)
-
-    tils = fetch_tils()
-    tils_md = "\n\n".join(
-        [
-            "[{title}](https://til.simonwillison.net/{topic}/{slug}) - {created_at}".format(
-                title=til["title"],
-                topic=til["topic"],
-                slug=til["slug"],
-                created_at=til["created_utc"].split("T")[0],
-            )
-            for til in tils
-        ]
-    )
-    rewritten = replace_chunk(rewritten, "tils", tils_md)
-
-    entries = fetch_blog_entries()[:6]
-    entries_md = "\n\n".join(
-        ["[{title}]({url}) - {published}".format(**entry) for entry in entries]
-    )
-    rewritten = replace_chunk(rewritten, "blog", entries_md)
+    ) or "_No releases yet._"
+    if project_releases.exists():
+        project_releases_content = project_releases.open().read()
+        project_releases_content = replace_chunk(
+            project_releases_content, "recent_releases", project_releases_md
+        )
+        project_releases_content = replace_chunk(
+            project_releases_content, "project_count", f"{len(releases):,}", inline=True
+        )
+        project_releases_content = replace_chunk(
+            project_releases_content,
+            "releases_count",
+            "{:,}".format(sum(r["total_releases"] for r in releases)),
+            inline=True,
+        )
+        project_releases.open("w").write(project_releases_content)
 
     readme.open("w").write(rewritten)

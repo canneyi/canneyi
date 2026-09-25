@@ -1,0 +1,30 @@
+{
+  "_comment": "Podcasts tracked by the scheduled tracker. apple_id is resolved to feed_url at runtime via the iTunes lookup API; youtube_handle (without the @) is resolved by scraping the channel page for its UC... channel ID. You can also set feed_url directly to skip lookup. Set 'paused': true to skip an entry temporarily.",
+  "podcasts": [
+    { "name": "80,000 Hours Podcast", "apple_id": "1245002988" },
+    { "name": "Acid Horizon", "apple_id": "1512615438" },
+    { "name": "Acquired", "apple_id": "1050462261" },
+    { "name": "Backlisted", "apple_id": "1063252175" },
+    { "name": "Chapo Trap House", "apple_id": "1097417804", "paused": true },
+    { "name": "Dr John Vervaeke", "apple_id": "1680606350" },
+    { "name": "Dwarkesh Podcast", "apple_id": "1516093381" },
+    { "name": "Epsilon Theory Podcast", "apple_id": "1107682538" },
+    { "name": "Forward Guidance", "apple_id": "1592743188" },
+    { "name": "Founders", "apple_id": "1141877104" },
+    { "name": "Google DeepMind: The Podcast", "apple_id": "1476316441" },
+    { "name": "Hermitix", "apple_id": "1437997652" },
+    { "name": "Invest Like the Best", "apple_id": "1154105909" },
+    { "name": "Long Now", "apple_id": "186908455" },
+    { "name": "Macro Voices", "apple_id": "1079172742" },
+    { "name": "Long Strange Trip: CEO to CEO with Brian Halligan", "apple_id": "1852309009" },
+    { "name": "Making Media", "apple_id": "1662094664" },
+    { "name": "No Priors", "apple_id": "1668002688" },
+    { "name": "Ones and Tooze", "apple_id": "1584397047" },
+    { "name": "Odd Lots", "apple_id": "1056200096" },
+    { "name": "Tetragrammaton with Rick Rubin", "apple_id": "1671669052" },
+    { "name": "The Grant Williams Podcast", "apple_id": "1508585135" },
+    { "name": "Browsers with Friends", "apple_id": "1589949171" },
+    { "name": "The Bugbash Podcast", "apple_id": "1828967504" },
+    { "name": "Antithesis (YouTube)", "youtube_handle": "antithesis-hq", "paused": true }
+  ]
+}
