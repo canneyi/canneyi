@@ -1,0 +1,136 @@
+# Podcast tracker — agent playbook
+
+When a scheduled Claude Code session is triggered with the prompt **"Run the podcast tracker"**, follow these steps exactly. Do not improvise structure or skip steps.
+
+## 1. Detect new episodes
+
+```bash
+cd /home/user/canneyi
+pip install -q -r requirements.txt
+python podcast_tracker/fetch.py
+```
+
+The script writes `podcast_tracker/cache/pending_episodes.json` with the new episodes since the last successful run.
+
+If the file's `episodes` array is empty: write a one-line digest noting "no new episodes" with today's date, commit it, skip the email, and stop.
+
+If `fetch.py` errors on a specific feed, keep going — the script continues past individual failures. Note the failures in a `## Issues` section of the digest.
+
+## 2. Read the pending episodes
+
+```bash
+cat podcast_tracker/cache/pending_episodes.json
+```
+
+Each episode has:
+- `podcast`, `title`, `link`, `published`, `duration`
+- `show_notes_text` — plain-text show notes (always present)
+- `transcript` — optional `{source_url, text}` if a transcript page was found
+
+## 3. Write the digest — editorial style
+
+The digest is a curated weekly briefing, not a mechanical per-feed dump. It reads like a sharp newsletter, but its coverage rules are strict (see below).
+
+Structure, in order:
+
+1. **Opening lede** (no heading): one paragraph, 3–6 sentences, tying the window's episodes together — the dominant tension or theme the feed kept circling, written with a point of view. No throat-clearing.
+
+2. **Themed sections**: group episodes under `## ALL-CAPS CATEGORY` headings that fit the actual material (e.g. `## MACRO & FINANCE`, `## AI & TECHNOLOGY`, `## HISTORY & CULTURE`). Invent categories per digest; 3–6 sections is typical. Order sections by strength of material.
+
+3. **Per episode**, within its section:
+
+```markdown
+### {Podcast name} {#episode number if the show numbers them} — "{Episode title}"
+
+**Guest:** {name (affiliation; one-line credential)} · **Hosts:** {host names} · **Aired:** {YYYY-MM-DD} · *{source note — either "Full official transcript read; quotes verbatim." or "No transcript — notes from show notes only."}* · [Listen]({link})
+
+**Thesis:** {2–5 sentences distilling the episode's core argument, with the specific numbers, names, and dates the speakers actually cite.}
+
+- **{Bolded lead sentence for the first key point.}** {2–4 sentences of substance — figures, claims, anecdotes, attributed to the speaker.}
+- **{Bolded lead for the next point.}** {...}
+{3–8 bullets depending on how much source material exists}
+
+> "{Exact quote}" — {speaker}
+{Quotes only when a transcript exists. Never fabricate a quote.}
+```
+
+**Coverage rules — these are hard requirements:**
+- Every episode in `pending_episodes.json` must be either (a) covered in a section, or (b) explicitly listed in a short end-note (`*Dropped for thin sourcing: {Podcast — Title}, ...*`) when the source material is genuinely too thin to say anything substantive. Never silently omit an episode, and never pad a thin episode into filler.
+- Do not fabricate quotes, timestamps, numbers, or claims. Transcript available → verbatim quotes allowed. Show-notes-only → no quotes, coarser bullets, and say so in the source note.
+- Keep names, book titles, and dates verbatim from the source. Don't paraphrase a title.
+- Target ~150–500 words per episode depending on source material.
+
+## 4. Write the digest file
+
+Path: `podcast_tracker/digests/{YYYY-MM-DD}.md` (use today's UTC date).
+
+Skeleton:
+
+```markdown
+# Podcast digest — {YYYY-MM-DD}
+
+{N} new episodes across {M} podcasts since the last digest.
+
+{Opening lede paragraph}
+
+{Themed sections, each with its episodes, per step 3}
+
+{*Dropped for thin sourcing: ...* — only if any were dropped}
+
+## Issues
+{Only include if any feeds failed. Otherwise omit this section.}
+- {Podcast name}: {short error}
+```
+
+## 5. Email the digest
+
+**5a. Duplicate guard (run this FIRST, every time):** using the Gmail MCP tools, call `list_drafts` with query `subject:"Podcast digest — {YYYY-MM-DD}"` AND `search_threads` with the same subject. If a draft or sent message for today's digest already exists, do NOT create another draft — note the existing one in the session reply and skip to step 6.
+
+**5b. Render the committed file to HTML mechanically** (never re-compose the content by hand):
+
+```bash
+pip install -q markdown
+python -c "import markdown, pathlib; print(markdown.markdown(pathlib.Path('podcast_tracker/digests/{YYYY-MM-DD}.md').read_text(), extensions=['extra']))" > /tmp/digest.html
+```
+
+**5c. Create exactly ONE draft** via the Gmail `create_draft` tool, addressed to `vpst6tdbw2@privaterelay.appleid.com`:
+
+- Subject: `Podcast digest — {YYYY-MM-DD} ({N} episodes)`
+- `htmlBody`: the exact contents of `/tmp/digest.html`
+- `body` (plain-text alternative): the exact contents of the committed `.md` file, read back from disk with `cat`
+- Prepend a single "Generated by podcast tracker" footer line linking to the committed file URL on GitHub (in both bodies).
+
+**The bodies must contain the full digest — every episode, verbatim from the committed file (the HTML being its mechanical rendering).** Do NOT, under any circumstances:
+- substitute a shortened version, a "highlights" / "top picks" section, or a contents list followed by "full notes are in the committed file";
+- summarize, truncate, drop, or sample episodes because the digest is long;
+- decide the digest is "too big to email" and abbreviate it on your own;
+- re-type or re-compose the body from memory instead of reading the file/rendering from disk.
+
+If the digest is large, that is expected — send it in full anyway.
+
+**5d. If `create_draft` errors or times out: do NOT retry blind.** Large bodies can appear to fail while actually succeeding, which creates duplicate drafts. First re-run the duplicate guard (5a); only retry if no draft for today exists. If it genuinely fails twice, record the failure verbatim in the digest's `## Issues` section, note that the email was not created, and continue — the committed markdown file is the source of truth.
+
+## 6. Commit and push
+
+```bash
+cd /home/user/canneyi
+git add podcast_tracker/digests/{YYYY-MM-DD}.md podcast_tracker/cache/seen_episodes.json podcast_tracker/cache/feeds.json
+python podcast_tracker/fetch.py --mark-seen
+git add podcast_tracker/cache/seen_episodes.json
+git commit -m "Podcast digest {YYYY-MM-DD}: {N} episodes"
+git push -u origin claude/podcast-tracking-agent-SgDto
+```
+
+`--mark-seen` must run **after** the digest is written, so that if the run dies mid-way the next run will retry the same episodes.
+
+Do NOT commit `pending_episodes.json` — it's an ephemeral artifact. (It's listed in `.gitignore`.)
+
+## 7. Reply in the session
+
+End the session with a short text reply summarizing:
+- Number of new episodes
+- Which podcasts they came from
+- Link to the committed digest file
+- Whether the email draft was created (and whether a duplicate was averted in 5a)
+
+That's it — keep the reply under 5 lines.
