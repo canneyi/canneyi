@@ -1,0 +1,3 @@
+__pycache__/
+*.pyc
+podcast_tracker/cache/pending_episodes.json
